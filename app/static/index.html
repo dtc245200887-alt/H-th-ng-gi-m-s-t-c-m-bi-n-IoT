@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IoT Monitor</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f4f7fb; color: #172033; }
+    header { padding: 24px; background: #172033; color: white; }
+    main { max-width: 1100px; margin: auto; padding: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .card { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 2px 10px #0001; }
+    .value { font-size: 30px; font-weight: 700; }
+    .alert { color: #b42318; background: #fee4e2; padding: 10px; border-radius: 6px; margin-top: 8px; }
+    #events { max-height: 350px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <header><h1>Hệ thống giám sát cảm biến IoT</h1></header>
+  <main>
+    <section class="grid" id="cards"></section>
+    <h2>Sự kiện realtime</h2>
+    <section class="card" id="events"></section>
+  </main>
+  <script>
+    const cards = document.getElementById("cards");
+    const events = document.getElementById("events");
+    const sensors = new Map();
+
+    async function load() {
+      const sensorList = await fetch("/sensors").then(r => r.json());
+      cards.innerHTML = "";
+      for (const sensor of sensorList) {
+        const latest = await fetch(`/sensors/${sensor.id}/readings/latest`)
+          .then(r => r.ok ? r.json() : null);
+        const card = document.createElement("article");
+        card.className = "card";
+        card.id = `sensor-${sensor.id}`;
+        card.innerHTML = `<h3>${sensor.name}</h3>
+          <div class="value">${latest ? latest.value : "--"} ${sensor.unit}</div>
+          <div>${sensor.location || "Không rõ vị trí"}</div>
+          <div class="status"></div>`;
+        cards.appendChild(card);
+      }
+    }
+
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(`${protocol}//${location.host}/ws/readings`);
+    socket.onmessage = event => {
+      const reading = JSON.parse(event.data);
+      const card = document.getElementById(`sensor-${reading.sensor_id}`);
+      if (card) {
+        card.querySelector(".value").textContent =
+          `${reading.value} ${reading.unit || ""}`;
+      }
+      const alert = reading.alert
+        ? `<div class="alert">${reading.alert.message}</div>` : "";
+      events.innerHTML = `<div><strong>${reading.sensor_code}</strong>: ${reading.value}${alert}</div>` + events.innerHTML;
+    };
+    load();
+  </script>
+</body>
+</html>
